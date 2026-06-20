@@ -8,7 +8,7 @@ documents into Chunks.
 
 """
 
-def load_document(director_path : str = "../PDFs"):
+def load_document(director_path : str):
     try:
         os.makedirs(director_path,exist_ok=True)
         PDF_Loader = DirectoryLoader(
@@ -18,6 +18,7 @@ def load_document(director_path : str = "../PDFs"):
         ) 
         pdf_files = PDF_Loader.load()
         print(f"{len(pdf_files)} Documents are convert into Lanchain document successfully")
+        return pdf_files
     except Exception as e:
         print(f"Error while loading documents : {e}")
         raise
@@ -31,7 +32,7 @@ def create_chunks(document ,chunk_size: int = 500 , chunk_overlap:int = 200 ):
         )
     chunks = text_splitter.split_documents(document)
     print(f"successfully {len(chunks)} from {len(document)} documents ")
-    
+    return chunks
 
     
 

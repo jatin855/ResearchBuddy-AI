@@ -39,7 +39,7 @@ class Embedding_Manager:
             numpy array of embeddings with shape (len(texts), embedding_dim)
 
         """
-        if self.model:
+        if not self.model:
             print("model is not loaded")
             raise 
         try:
@@ -47,6 +47,7 @@ class Embedding_Manager:
             print(f"generating Embeddings for {len(Texts)}")
             embeddings = self.model.encode(Texts,show_progress_bar=True)
             print(f"Embeddings Created : {embeddings.shape}")
+            return embeddings
         except Exception as e:
             print(f"Error while generating Embeddings : {e}")
             raise
