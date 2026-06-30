@@ -1,0 +1,285 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1c2430;
+  background: #f5f7fa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  background: #2364aa;
+  color: white;
+  min-height: 42px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+select,
+textarea {
+  border: 1px solid #d4dae3;
+  border-radius: 8px;
+  background: white;
+  color: #1c2430;
+}
+
+select {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+textarea {
+  min-height: 120px;
+  padding: 12px;
+  resize: vertical;
+}
+
+main {
+  min-height: 100vh;
+}
+
+.topbar {
+  height: 96px;
+  padding: 0 32px;
+  border-bottom: 1px solid #dfe4ec;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.topbar h1,
+.hero h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 24px;
+  padding: 24px;
+}
+
+.sidebar,
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.panel,
+.upload,
+.hero {
+  background: white;
+  border: 1px solid #dfe4ec;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.panel h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+
+.upload {
+  display: grid;
+  gap: 12px;
+}
+
+.upload label {
+  min-height: 112px;
+  border: 1px dashed #9fb0c7;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  text-align: center;
+  color: #475569;
+  cursor: pointer;
+}
+
+.upload input {
+  display: none;
+}
+
+.paper-list {
+  display: grid;
+  gap: 8px;
+}
+
+.paper {
+  width: 100%;
+  justify-content: flex-start;
+  background: #edf2f7;
+  color: #243244;
+  overflow: hidden;
+}
+
+.paper span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paper.active {
+  background: #2364aa;
+  color: white;
+}
+
+.qa {
+  display: grid;
+  gap: 10px;
+}
+
+.hero {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.hero h2 {
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.summary-grid .panel:first-child {
+  grid-column: 1 / -1;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 10px;
+}
+
+.evidence {
+  border-left: 3px solid #2f9c95;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.evidence p,
+.answer p {
+  margin: 0 0 10px;
+  line-height: 1.55;
+}
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  background: #e5f3f1;
+  color: #0f675f;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 9px;
+  margin-right: 8px;
+}
+
+.compare form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.comparison .panel {
+  padding: 0;
+  border: 0;
+}
+
+.comparison h3 {
+  margin: 0 0 12px;
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.error {
+  color: #b42318;
+  margin: 0;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 920px) {
+  .topbar,
+  .hero {
+    align-items: stretch;
+    flex-direction: column;
+    height: auto;
+    padding: 20px;
+  }
+
+  .layout,
+  .summary-grid,
+  .comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .layout {
+    padding: 16px;
+  }
+
+  .compare form {
+    grid-template-columns: 1fr;
+  }
+}

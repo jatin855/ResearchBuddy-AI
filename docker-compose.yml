@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: researchbuddy
+      POSTGRES_USER: researchbuddy
+      POSTGRES_PASSWORD: researchbuddy
+    ports:
+      - "5433:5432"
+    volumes:
+      - researchbuddy_pg:/var/lib/postgresql/data
+
+volumes:
+  researchbuddy_pg:

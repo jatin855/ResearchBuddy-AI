@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/researchbuddy}
+    username: ${DATABASE_USERNAME:researchbuddy}
+    password: ${DATABASE_PASSWORD:researchbuddy}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+researchbuddy:
+  ai:
+    base-url: ${AI_SERVICE_URL:http://localhost:8000}
