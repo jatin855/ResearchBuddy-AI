@@ -16,6 +16,67 @@ import re
 import chromadb
 import llm_client
 
+# Startup Verification & Configuration Banner
+# Print model configuration banner
+print("===================================")
+print("LLM : Gemini")
+print(f"Model : {llm_client.GEMINI_MODEL}")
+print("Embeddings : all-MiniLM-L6-v2")
+print("Vector DB : ChromaDB")
+print("===================================\n")
+
+def safe_print_status(success: bool, message: str):
+    symbol = "✓" if success else "✗"
+    fallback_symbol = "[OK]" if success else "[ERROR]"
+    try:
+        print(f"{symbol} {message}\n")
+    except UnicodeEncodeError:
+        print(f"{fallback_symbol} {message}\n")
+
+# Verify required components
+print("Loading Gemini...")
+if not llm_client.GEMINI_API_KEY:
+    safe_print_status(False, "Missing GEMINI_API_KEY environment variable.")
+    sys.exit(1)
+
+try:
+    # A simple call to Gemini to verify connectivity
+    llm_client.client.models.generate_content(
+        model=llm_client.GEMINI_MODEL,
+        contents="ping",
+    )
+    safe_print_status(True, "Gemini OK")
+except Exception as e:
+    safe_print_status(False, f"Gemini Connection Failed: {e}")
+    sys.exit(1)
+
+print("Loading SentenceTransformer...")
+try:
+    from src import Embedding_Manager
+    embedding_manager = Embedding_Manager()
+    safe_print_status(True, "all-MiniLM-L6-v2 loaded")
+except Exception as e:
+    safe_print_status(False, f"Failed to load SentenceTransformer: {e}")
+    sys.exit(1)
+
+print("Connecting to ChromaDB...")
+try:
+    client = chromadb.PersistentClient(path=str(base_dir.parent / "vector_dB"))
+    safe_print_status(True, "Connected")
+except Exception as e:
+    safe_print_status(False, f"Failed to connect to ChromaDB: {e}")
+    sys.exit(1)
+
+print("Loading Vector Collection...")
+try:
+    collection = client.get_or_create_collection("researchbuddy_chunks")
+    safe_print_status(True, "researchbuddy_chunks loaded")
+except Exception as e:
+    safe_print_status(False, f"Failed to load collection: {e}")
+    sys.exit(1)
+
+print("AI Service Ready\n")
+
 app = FastAPI(title="ResearchBuddy AI Service")
 
 app.add_middleware(
@@ -31,9 +92,6 @@ pdf_dir = data_dir / "pdfs"
 paper_dir = data_dir / "papers"
 for folder in [pdf_dir, paper_dir]:
     folder.mkdir(parents=True, exist_ok=True)
-
-client = None
-collection = None
 
 section_names = [
     "abstract",
@@ -78,24 +136,10 @@ def save_paper(paper):
     paper_path(paper["id"]).write_text(json.dumps(paper, indent=2), encoding="utf-8")
 
 def get_collection():
-    global client, collection
-    if collection is not None:
-        return collection
-    if chromadb is None:
-        return None
-    try:
-        client = chromadb.PersistentClient(path=str(base_dir.parent / "vector_dB"))
-        collection = client.get_or_create_collection("pdf_vectordB")
-        return collection
-    except Exception:
-        return None
+    return collection
 
 def get_embedding_manager():
-    try:
-        from src import Embedding_Manager
-        return Embedding_Manager()
-    except Exception:
-        return None
+    return embedding_manager
 
 def clean_text(value):
     value = re.sub(r"-\n", "", value)
@@ -138,132 +182,33 @@ def merge_sections(sections):
             merged.append(section)
     return merged
 
-def fallback_embedding(text, dimensions=384):
-    values = [0.0] * dimensions
-    for token in re.findall(r"\w+", text.lower()):
-        digest = hashlib.sha256(token.encode("utf-8")).digest()
-        pos = int.from_bytes(digest[:2], "big") % dimensions
-        sign = 1 if digest[2] % 2 == 0 else -1
-        values[pos] += sign
-    norm = math.sqrt(sum(value * value for value in values)) or 1.0
-    return [value / norm for value in values]
-
-def cosine(left, right):
-    total = sum(a * b for a, b in zip(left, right))
-    left_norm = math.sqrt(sum(a * a for a in left)) or 1.0
-    right_norm = math.sqrt(sum(b * b for b in right)) or 1.0
-    return total / (left_norm * right_norm)
 
 def retrieve(paper, query, top_k=5):
     store = get_collection()
     em = get_embedding_manager()
-    if em:
-        try:
-            query_embedding = em.gen_embeddings([query])[0]
-            if hasattr(query_embedding, "tolist"):
-                query_embedding = query_embedding.tolist()
-        except Exception:
-            query_embedding = fallback_embedding(query)
-    else:
-        query_embedding = fallback_embedding(query)
+    
+    query_embedding = em.gen_embeddings([query])[0]
+    if hasattr(query_embedding, "tolist"):
+        query_embedding = query_embedding.tolist()
         
-    if store is not None:
-        try:
-            results = store.query(
-                query_embeddings=[query_embedding],
-                n_results=100,
-            )
-            found = []
-            file_name = paper.get("fileName", "")
-            paper_id = paper.get("id", "")
-            for index, text in enumerate(results.get("documents", [[]])[0]):
-                meta = results.get("metadatas", [[]])[0][index]
-                source = meta.get("source", "")
-                if (file_name and file_name in source) or (paper_id and paper_id in source):
-                    found.append({
-                        "text": text,
-                        "section": meta.get("section", "Unknown"),
-                        "page": meta.get("page", 0) + 1,
-                        "score": 1.0,
-                    })
-            if found:
-                return found[:top_k]
-        except Exception as e:
-            print(f"Chroma retrieval failed: {e}")
-            pass
-            
-    chunks = paper.get("chunks", [])
-    ranked = []
-    for chunk in chunks:
-        embedding = chunk.get("embedding") or fallback_embedding(chunk["text"])
-        ranked.append((cosine(query_embedding, embedding), chunk))
-    ranked.sort(key=lambda item: item[0], reverse=True)
-    return [
-        {
-            "text": chunk["text"],
-            "section": chunk["section"],
-            "page": chunk["page"],
-            "score": round(score, 4),
-        }
-        for score, chunk in ranked[:top_k]
-    ]
-
-def sentences(text):
-    return [item.strip() for item in re.split(r"(?<=[.!?])\s+", text) if len(item.strip()) > 40]
-
-def pick_sentences(chunks, keywords, limit=4):
-    selected = []
-    terms = [term.lower() for term in keywords]
-    for chunk in chunks:
-        for sentence in sentences(chunk["text"]):
-            lowered = sentence.lower()
-            if any(term in lowered for term in terms):
-                selected.append({
-                    "text": sentence,
-                    "section": chunk["section"],
-                    "page": chunk["page"],
-                })
-            if len(selected) >= limit:
-                return selected
-    if not selected:
-        for chunk in chunks[:limit]:
-            text = sentences(chunk["text"])
-            if text:
-                selected.append({"text": text[0], "section": chunk["section"], "page": chunk["page"]})
-    return selected[:limit]
-
-def cite(item):
-    return {"section": item.get("section", "Unknown"), "page": item.get("page", 1)}
-
-def build_summary(paper):
-    chunks = paper.get("chunks", [])
-    contributions = pick_sentences(chunks, ["propose", "present", "introduce", "contribution", "show"], 5)
-    limitations = pick_sentences(chunks, ["limitation", "future", "fail", "cannot", "however"], 4)
-    datasets = pick_sentences(chunks, ["dataset", "benchmark", "corpus", "accuracy", "f1", "bleu", "rouge", "metric"], 5)
-    methods = pick_sentences(chunks, ["method", "model", "approach", "training", "architecture"], 4)
-    future = pick_sentences(chunks, ["future work", "future", "extend", "further"], 3)
-    claims = pick_sentences(chunks, ["outperform", "improve", "achieve", "state-of-the-art", "significant"], 5)
-    overview_items = pick_sentences(chunks, ["abstract", "paper", "study", "propose", "result"], 3)
-    return {
-        "title": paper["title"],
-        "overview": [{"text": item["text"], "source": cite(item)} for item in overview_items],
-        "keyContributions": [{"text": item["text"], "source": cite(item)} for item in contributions],
-        "claims": [{"text": item["text"], "source": cite(item)} for item in claims],
-        "methodology": [{"text": item["text"], "source": cite(item)} for item in methods],
-        "limitations": [{"text": item["text"], "source": cite(item)} for item in limitations],
-        "futureWork": [{"text": item["text"], "source": cite(item)} for item in future],
-        "datasetsAndMetrics": [{"text": item["text"], "source": cite(item)} for item in datasets],
-    }
-
-def answer_question(paper, question):
-    found = retrieve(paper, question, 5)
-    if not found:
-        return {"answer": "No grounded answer was found in the paper.", "sources": []}
-    answer = " ".join(sentences(item["text"])[0] if sentences(item["text"]) else item["text"][:260] for item in found[:2])
-    return {
-        "answer": answer,
-        "sources": [{"section": item["section"], "page": item["page"], "score": item["score"]} for item in found],
-    }
+    results = store.query(
+        query_embeddings=[query_embedding],
+        n_results=100,
+    )
+    found = []
+    file_name = paper.get("fileName", "")
+    paper_id = paper.get("id", "")
+    for index, text in enumerate(results.get("documents", [[]])[0]):
+        meta = results.get("metadatas", [[]])[0][index]
+        source = meta.get("source", "")
+        if (file_name and file_name in source) or (paper_id and paper_id in source):
+            found.append({
+                "text": text,
+                "section": meta.get("section", "Unknown"),
+                "page": meta.get("page", 0) + 1,
+                "score": 1.0,
+            })
+    return found[:top_k]
 
 @app.get("/health")
 def health():
@@ -340,57 +285,55 @@ def get_paper(paper_id: str):
 @app.get("/papers/{paper_id}/summary")
 def summarize_paper(paper_id: str):
     paper = load_paper(paper_id)
-    if llm_client.is_gemini_available():
-        summary = llm_client.get_grounded_summary(paper["title"], paper.get("chunks", []))
-        if summary and "overview" in summary:
-            return summary
-    return build_summary(paper)
+    try:
+        return llm_client.get_grounded_summary(paper["title"], paper.get("chunks", []))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/papers/{paper_id}/claims")
 def claims(paper_id: str):
     paper = load_paper(paper_id)
-    if llm_client.is_gemini_available():
+    try:
         summary = llm_client.get_grounded_summary(paper["title"], paper.get("chunks", []))
-        if summary and "claims" in summary:
-            return {"claims": summary["claims"]}
-    return {"claims": build_summary(paper)["claims"]}
+        return {"claims": summary.get("claims", [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/papers/{paper_id}/limitations")
 def limitations(paper_id: str):
     paper = load_paper(paper_id)
-    if llm_client.is_gemini_available():
+    try:
         summary = llm_client.get_grounded_summary(paper["title"], paper.get("chunks", []))
-        if summary and "limitations" in summary:
-            return {"limitations": summary["limitations"]}
-    return {"limitations": build_summary(paper)["limitations"]}
+        return {"limitations": summary.get("limitations", [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/papers/{paper_id}/future-work")
 def future_work(paper_id: str):
     paper = load_paper(paper_id)
-    if llm_client.is_gemini_available():
+    try:
         summary = llm_client.get_grounded_summary(paper["title"], paper.get("chunks", []))
-        if summary and "futureWork" in summary:
-            return {"futureWork": summary["futureWork"]}
-    return {"futureWork": build_summary(paper)["futureWork"]}
+        return {"futureWork": summary.get("futureWork", [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/papers/{paper_id}/datasets-metrics")
 def datasets_metrics(paper_id: str):
     paper = load_paper(paper_id)
-    if llm_client.is_gemini_available():
+    try:
         summary = llm_client.get_grounded_summary(paper["title"], paper.get("chunks", []))
-        if summary and "datasetsAndMetrics" in summary:
-            return {"datasetsAndMetrics": summary["datasetsAndMetrics"]}
-    return {"datasetsAndMetrics": build_summary(paper)["datasetsAndMetrics"]}
+        return {"datasetsAndMetrics": summary.get("datasetsAndMetrics", [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/papers/{paper_id}/qa")
 def qa(paper_id: str, request: QuestionRequest):
     paper = load_paper(paper_id)
-    if llm_client.is_gemini_available():
+    try:
         chunks = retrieve(paper, request.question, 5)
-        ans = llm_client.get_grounded_qa(request.question, chunks)
-        if ans and "answer" in ans:
-            return ans
-    return answer_question(paper, request.question)
+        return llm_client.get_grounded_qa(request.question, chunks)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/papers/compare")
 def compare(request: CompareRequest):
@@ -398,47 +341,17 @@ def compare(request: CompareRequest):
         raise HTTPException(status_code=400, detail="Provide exactly two paper ids")
     left = load_paper(request.paperIds[0])
     right = load_paper(request.paperIds[1])
-    
-    left_summary = None
-    right_summary = None
-    
-    if llm_client.is_gemini_available():
+    try:
         left_summary = llm_client.get_grounded_summary(left["title"], left.get("chunks", []))
         right_summary = llm_client.get_grounded_summary(right["title"], right.get("chunks", []))
-        if left_summary and right_summary:
-            comparison = llm_client.get_comparison(left["title"], left_summary, right["title"], right_summary)
-            if comparison and "paperA" in comparison:
-                comparison["papers"] = [
-                    {"id": left["id"], "title": left["title"]},
-                    {"id": right["id"], "title": right["title"]},
-                ]
-                return comparison
-                
-    if not left_summary:
-        left_summary = build_summary(left)
-    if not right_summary:
-        right_summary = build_summary(right)
-        
-    return {
-        "papers": [
+        comparison = llm_client.get_comparison(left["title"], left_summary, right["title"], right_summary)
+        comparison["papers"] = [
             {"id": left["id"], "title": left["title"]},
             {"id": right["id"], "title": right["title"]},
-        ],
-        "sharedThemes": [
-            item for item in ["model", "dataset", "training", "evaluation", "architecture"]
-            if item in left["text"].lower() and item in right["text"].lower()
-        ],
-        "paperA": {
-            "contributions": left_summary["keyContributions"][:3],
-            "limitations": left_summary["limitations"][:2],
-            "datasetsAndMetrics": left_summary["datasetsAndMetrics"][:3],
-        },
-        "paperB": {
-            "contributions": right_summary["keyContributions"][:3],
-            "limitations": right_summary["limitations"][:2],
-            "datasetsAndMetrics": right_summary["datasetsAndMetrics"][:3],
-        },
-    }
+        ]
+        return comparison
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/tools/extract")
 async def extract_tool(file: UploadFile = File(...)):
@@ -461,10 +374,8 @@ def chunk_tool(request: TextRequest):
 @app.post("/tools/embed")
 def embed_tool(request: TextRequest):
     em = get_embedding_manager()
-    if em:
-        emb = em.gen_embeddings([request.text])[0]
-        return {"embedding": emb.tolist() if hasattr(emb, "tolist") else list(emb)}
-    return {"embedding": fallback_embedding(request.text)}
+    emb = em.gen_embeddings([request.text])[0]
+    return {"embedding": emb.tolist() if hasattr(emb, "tolist") else list(emb)}
 
 @app.post("/tools/retrieve")
 def retrieve_tool(request: RetrievalRequest):

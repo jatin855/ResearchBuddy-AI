@@ -12,7 +12,7 @@ class for vector Store
 """
 
 class Vector_Store:
-    def __init__(self,persistent_Directory: str , collection_name : str = "pdf_vectordB"):
+    def __init__(self,persistent_Directory: str , collection_name : str = "researchbuddy_chunks"):
         """
         Initialize the vector store
         
@@ -39,6 +39,7 @@ class Vector_Store:
             print(f"vector store initialized succesfully : {self.collection_name}")
         except Exception as e:
             print(f"Error while inizialising client and collection : {e}")
+            raise e
         
     def add_document(self,document : List[Any] , Embedding : np.ndarray):
         """

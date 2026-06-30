@@ -1,13 +1,17 @@
 import os
 import json
-import urllib.request
-import urllib.error
+from dotenv import load_dotenv
+from google import genai
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+load_dotenv()
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise RuntimeError("Missing GEMINI_API_KEY environment variable. Please configure it in your .env file.")
+
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
-def is_gemini_available() -> bool:
-    return bool(GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 def clean_json_response(text: str) -> str:
     if not text:
@@ -21,36 +25,20 @@ def clean_json_response(text: str) -> str:
         text = text[:-3]
     return text.strip()
 
-def call_gemini(prompt: str, json_mode: bool = False) -> str:
-    if not is_gemini_available():
-        return ""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
-    if json_mode:
-        data["generationConfig"] = {
-            "responseMimeType": "application/json"
-        }
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(data).encode("utf-8"),
-        headers=headers,
-        method="POST"
-    )
+def call_gemini(prompt: str) -> str:
     try:
-        with urllib.request.urlopen(req) as response:
-            res_data = json.loads(response.read().decode("utf-8"))
-            text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-            return clean_json_response(text)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
+        return clean_json_response(response.text)
     except Exception as e:
-        print(f"Gemini API call failed: {e}")
-        return ""
+        raise RuntimeError(f"Gemini API request failed: {e}")
 
 def get_grounded_summary(paper_title: str, chunks: list) -> dict:
+    if not chunks:
+        raise RuntimeError("No text chunks available for summarization.")
+    
     context_parts = []
     for i, c in enumerate(chunks):
         context_parts.append(f"Chunk {i+1} (Section: {c.get('section', 'Unknown')}, Page: {c.get('page', 1)}):\n{c.get('text', '')}")
@@ -114,15 +102,16 @@ Rules:
 3. Do not make up any facts or citations. If a section (like 'futureWork' or 'limitations') has no information in the context, leave its array empty.
 4. Return ONLY the JSON object. Do not include markdown code block formatting.
 """
-    res_text = call_gemini(prompt, json_mode=True)
-    if res_text:
-        try:
-            return json.loads(res_text)
-        except Exception:
-            pass
-    return {}
+    res_text = call_gemini(prompt)
+    try:
+        return json.loads(res_text)
+    except Exception as e:
+        raise RuntimeError(f"Failed to parse Gemini JSON response: {e}. Raw response: {res_text}")
 
 def get_grounded_qa(question: str, chunks: list) -> dict:
+    if not chunks:
+        raise RuntimeError("No text chunks retrieved to answer the question.")
+
     context_parts = []
     for i, c in enumerate(chunks):
         context_parts.append(f"Chunk {i+1} (Section: {c.get('section', 'Unknown')}, Page: {c.get('page', 1)}):\n{c.get('text', '')}")
@@ -152,13 +141,11 @@ Rules:
 2. The 'sources' array should list the sections and pages of the chunks you actually used to formulate your answer.
 3. Return ONLY the JSON object. Do not include markdown code block formatting.
 """
-    res_text = call_gemini(prompt, json_mode=True)
-    if res_text:
-        try:
-            return json.loads(res_text)
-        except Exception:
-            pass
-    return {}
+    res_text = call_gemini(prompt)
+    try:
+        return json.loads(res_text)
+    except Exception as e:
+        raise RuntimeError(f"Failed to parse Gemini JSON response: {e}. Raw response: {res_text}")
 
 def get_comparison(paper_a_title: str, paper_a_summary: dict, paper_b_title: str, paper_b_summary: dict) -> dict:
     prompt = f"""You are a research assistant. Compare the following two research papers based on their summaries.
@@ -210,10 +197,8 @@ Rules:
 2. Summarize key contributions, limitations, and datasets/metrics for each paper using the provided summaries.
 3. Return ONLY the JSON object. Do not include markdown code block formatting.
 """
-    res_text = call_gemini(prompt, json_mode=True)
-    if res_text:
-        try:
-            return json.loads(res_text)
-        except Exception:
-            pass
-    return {}
+    res_text = call_gemini(prompt)
+    try:
+        return json.loads(res_text)
+    except Exception as e:
+        raise RuntimeError(f"Failed to parse Gemini JSON response: {e}. Raw response: {res_text}")

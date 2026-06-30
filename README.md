@@ -1,4 +1,4 @@
-# 🧠 ResearchBuddy AI: RAG-Based Research Paper Claim Summarizer
+# 🧠 ResearchBuddy AI: Production-Grade RAG Research Paper Claim Summarizer
 
 [![React](https://img.shields.io/badge/Frontend-React-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Spring Boot](https://img.shields.io/badge/Backend-Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
@@ -6,7 +6,7 @@
 [![VectorDB](https://img.shields.io/badge/Vector_DB-ChromaDB-blue?style=for-the-badge)](https://www.trychroma.com/)
 [![PostgreSQL](https://img.shields.io/badge/Metadata-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-ResearchBuddy AI is a premium, enterprise-grade **Retrieval-Augmented Generation (RAG)** application designed to ingest, parse, chunk, index, and analyze dense academic research papers. It automatically extracts key claims, methodologies, contributions, limitations, datasets, and future work, while offering a grounded Question-Answering interface and a comparative analysis engine for multiple papers.
+**ResearchBuddy AI** is an enterprise-grade **Retrieval-Augmented Generation (RAG)** application designed to ingest, parse, chunk, index, and analyze dense academic research papers. It automatically extracts key claims, methodologies, contributions, limitations, datasets, and future work using an official Google Gemini LLM integration, while offering a grounded Question-Answering interface and a comparative analysis engine for multiple papers.
 
 ---
 
@@ -27,7 +27,7 @@ graph TD
     SpringBoot[Spring Boot API <br> Port 8080]:::backend
     FastAPI[FastAPI AI Service <br> Port 8000]:::aiservice
     Postgres[(PostgreSQL <br> Port 5433)]:::storage
-    Chroma[(ChromaDB / FAISS <br> Vector Store)]:::storage
+    Chroma[(ChromaDB <br> Vector Store)]:::storage
     FileStore[(PDF File Store)]:::storage
 
     %% Connections
@@ -43,7 +43,7 @@ graph TD
 ## 🔄 Core Workflows & Pipelines
 
 ### 1. PDF Ingestion & RAG Indexing Pipeline
-When a user uploads a research paper, the system runs an automated pipeline to extract text, detect sections, chunk content, generate embeddings, and index the vectors.
+When a user uploads a research paper, the system runs an automated pipeline to extract text, detect sections, chunk content, generate embeddings, and index the vectors in ChromaDB.
 
 ```mermaid
 flowchart TD
@@ -60,7 +60,7 @@ flowchart TD
 ```
 
 ### 2. Grounded Retrieval & QA Flow
-To prevent hallucinations, the Question-Answering engine utilizes a grounded retrieval loop before synthesizing answers.
+To prevent hallucinations, the Question-Answering engine utilizes a grounded retrieval loop before synthesizing answers. There are **no local heuristic fallbacks**; if the API or database fails, the server rejects the request with a clear error payload.
 
 ```mermaid
 sequenceDiagram
@@ -70,6 +70,7 @@ sequenceDiagram
     participant BE as Spring Boot Backend
     participant AI as FastAPI AI Service
     participant VDB as ChromaDB Vector Store
+    participant Gem as Gemini 2.5 Flash
 
     User->>FE: Ask: "What dataset is used?"
     FE->>BE: POST /api/papers/{id}/qa
@@ -77,8 +78,8 @@ sequenceDiagram
     AI->>AI: Embed query using SentenceTransformer
     AI->>VDB: Query top-K nearest neighbors
     VDB-->>AI: Return top-5 relevant text chunks + page sources
-    AI->>AI: Extract sentences & rank by Cosine Similarity
-    AI->>AI: Synthesize Grounded Answer + Citations
+    AI->>Gem: Generate content (Grounded Prompt + Context chunks)
+    Gem-->>AI: Return grounded JSON Response
     AI-->>BE: Return Answer + Sources (JSON)
     BE-->>FE: Return response
     FE-->>User: Display Answer with highlighted citations (e.g., "Methodology p.4")
@@ -91,11 +92,43 @@ sequenceDiagram
 | Component | Technology | Rationale |
 | :--- | :--- | :--- |
 | **Frontend** | **React & Vite** | Lightweight, high-performance rendering, and rapid hot-module reloading (HMR) for interactive UI updates. |
-| **Backend** | **Spring Boot 3.3** | Enterprise-ready stability, strong type safety, and robust transaction management. Uses **Spring WebFlux WebClient** for non-blocking, asynchronous communication with the AI service. |
-| **AI Service** | **FastAPI & Uvicorn** | Python-native speed, automatic OpenAPI documentation, and direct integration with machine learning libraries like `sentence-transformers` and `PyMuPDF`. |
-| **Vector DB** | **ChromaDB** | Serverless, developer-friendly vector database ideal for indexing document-level chunks with high metadata filtering performance. |
-| **Metadata DB**| **PostgreSQL 16** | ACID-compliant relational storage to manage paper records, statuses, and cached RAG summaries. |
-| **Embeddings** | **Sentence Transformers** | Local execution of `all-MiniLM-L6-v2` (384-dimensional dense vectors) to guarantee complete data privacy and zero external API dependencies. |
+| **Backend** | **Spring Boot 3.3** | Enterprise-ready stability, strong type safety, and robust transaction management. Uses **Spring WebFlux WebClient** for non-blocking, asynchronous communication. |
+| **AI Service** | **FastAPI & Uvicorn** | Python-native speed, automatic OpenAPI documentation, and direct integration with machine learning libraries. |
+| **Vector DB** | **ChromaDB** | Vector database to store document embeddings and query nearest neighbors based on semantic cosine similarity. |
+| **Metadata DB**| **PostgreSQL 16** | ACID-compliant relational storage to manage paper records, metadata, and cached summaries. |
+| **Embeddings** | **Sentence Transformers** | Local execution of `all-MiniLM-L6-v2` (384-dimensional dense vectors) to guarantee fast and precise text representations. |
+| **LLM** | **Google Gemini 2.5 Flash** | Cloud LLM integration via the official `google-genai` SDK for grounded generation (claims, summaries, comparisons, and QA). |
+
+---
+
+## 🚀 Fail-Fast Startup Verification
+
+To ensure reliability, the FastAPI server validates all major dependencies sequentially during startup. If any step fails, the server exits immediately with status `1`.
+
+```
+===================================
+LLM : Gemini
+Model : gemini-2.5-flash
+Embeddings : all-MiniLM-L6-v2
+Vector DB : ChromaDB
+===================================
+
+Loading Gemini...
+[OK] Gemini OK
+
+Loading SentenceTransformer...
+loading all-MiniLM-L6-v2 model
+all-MiniLM-L6-v2 has loaded Successfully
+[OK] all-MiniLM-L6-v2 loaded
+
+Connecting to ChromaDB...
+[OK] Connected
+
+Loading Vector Collection...
+[OK] researchbuddy_chunks loaded
+
+AI Service Ready
+```
 
 ---
 
@@ -122,7 +155,7 @@ Retrieval Accuracy (%)
 * **Chunk Size**: `900 words` — Large enough to preserve complete paragraph context and mathematical proof steps, yet small enough to avoid dilute embeddings.
 * **Overlap**: `140 words` — Prevents loss of context at chunk boundaries.
 * **Embedding Dimension**: `384` — Balanced trade-off between semantic representation and local CPU search speed.
-* **Fallbacks**: When hardware or package limitations prevent running GPU-based embeddings, the system falls back to an **information-theoretic SHA-256 token-signature embedding** with a Cosine Similarity ranking, ensuring the system remains functional on any machine.
+* **No Mock Fallbacks**: The system relies strictly on SentenceTransformer (`all-MiniLM-L6-v2`) and ChromaDB (`researchbuddy_chunks`) for embeddings and retrieval, and Gemini for text generation.
 
 ---
 
@@ -132,7 +165,7 @@ Retrieval Accuracy (%)
 * **Node.js** (v20+)
 * **Java JDK 17**
 * **Apache Maven** (v3.9+)
-* **Python** (v3.11+)
+* **Python** (v3.11 or v3.12)
 * **Docker Desktop**
 
 ---
@@ -163,10 +196,16 @@ docker compose up -d postgres
 3. Install dependencies:
    ```bash
    pip install -r requirements.txt
+   pip install -r requirements-ml.txt
    ```
-4. Start the FastAPI server:
+4. Create a `.env` file inside the `ai-service` directory:
+   ```env
+   GEMINI_API_KEY=your_gemini_api_key_here
+   GEMINI_MODEL=gemini-2.5-flash
+   ```
+5. Start the FastAPI server:
    ```bash
-   uvicorn main:app --reload --port 8000
+   python -m uvicorn main:app --reload --port 8000
    ```
 
 ### Step 4: Run the Spring Boot Backend
@@ -178,7 +217,6 @@ docker compose up -d postgres
    ```bash
    mvn spring-boot:run
    ```
-*Note: The backend programmatically configures its default JVM timezone to `UTC` to guarantee smooth handshake compatibility with the PostgreSQL Docker container.*
 
 ### Step 5: Start the Frontend
 1. Open a new terminal and navigate to the `frontend` directory:
@@ -204,12 +242,14 @@ ResearchBuddy-AI/
 ├── ai-service/              # FastAPI AI Service
 │   ├── data/                # Local storage for PDFs, vectors, and JSON cache
 │   ├── main.py              # Extraction, chunking, embedding, and QA endpoints
-│   └── requirements.txt     # Python dependencies
+│   ├── llm_client.py        # Official GenAI SDK wrapper
+│   ├── requirements.txt     # Python web framework dependencies
+│   └── requirements-ml.txt  # ML & Vector Database dependencies
 ├── backend/                 # Spring Boot Backend
 │   ├── src/main/java/com/researchbuddy/backend/
 │   │   ├── config/          # Cors and WebClient configurations
 │   │   ├── paper/           # Controllers, Services, JPA Entities, Repositories
-│   │   └── ResearchBuddyBackendApplication.java  # Main entrypoint (UTC Timezone fix)
+│   │   └── ResearchBuddyBackendApplication.java  # Main entrypoint
 │   ├── src/main/resources/  
 │   │   └── application.yml  # PostgreSQL & AI Service URLs (Port 5433)
 │   └── pom.xml              # Maven dependencies
@@ -228,7 +268,7 @@ ResearchBuddy-AI/
 
 ## 🗺️ Future Roadmap
 
-- [ ] **LLM Integration**: Add options to toggle between local Ollama (Llama 3/Mistral) and cloud APIs (Gemini/OpenAI) for summaries.
 - [ ] **Dynamic Citation Rendering**: Allow users to click on a citation (e.g., `Page 4`) and view the exact PDF page side-by-side.
 - [ ] **Multi-Paper Synthesis**: Generate a unified literature review matrix across a selection of 5+ papers.
 - [ ] **Advanced Section Parsing**: Train a layout-parser model (like LayoutLM) to improve extraction of figures, tables, and mathematical equations.
+- [ ] **Multi-Agent Evaluation**: Use a multi-agent framework to evaluate RAG factual grounding score and automatically re-retrieve when hallucination chance is high.

@@ -44,13 +44,13 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-Optional real embedding/vector packages:
+Required real embedding/vector packages:
 
 ```bash
 pip install -r requirements-ml.txt
 ```
 
-On Windows, use Python 3.11 or 3.12 for the optional Chroma install, or install Microsoft C++ Build Tools. The AI service still runs without this optional file using fallback embeddings and retrieval.
+On Windows, use Python 3.11 or 3.12 for the Chroma install, or install Microsoft C++ Build Tools. These dependencies are mandatory for the AI service.
 
 Start the backend:
 
@@ -94,4 +94,4 @@ AI service:
 - `POST /tools/embed`
 - `POST /tools/retrieve`
 
-The AI service uses real PDF extraction, section detection, chunking, Sentence Transformers embeddings when available, and ChromaDB when available. If model or vector dependencies cannot load, deterministic local fallback retrieval keeps the app usable for development.
+The AI service uses real PDF extraction, section detection, chunking, Sentence Transformers embeddings (all-MiniLM-L6-v2), and ChromaDB (researchbuddy_chunks). It validates all components during startup and exits immediately if any dependency is unavailable.
