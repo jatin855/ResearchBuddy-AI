@@ -1,4 +1,4 @@
-# 🧠 ResearchBuddy AI: Production-Grade RAG Research Paper Claim Summarizer
+# 🧠 ResearchBuddy AI: Full-Stack RAG Research Assistant
 
 [![React](https://img.shields.io/badge/Frontend-React-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Spring Boot](https://img.shields.io/badge/Backend-Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
@@ -6,7 +6,7 @@
 [![VectorDB](https://img.shields.io/badge/Vector_DB-ChromaDB-blue?style=for-the-badge)](https://www.trychroma.com/)
 [![PostgreSQL](https://img.shields.io/badge/Metadata-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-**ResearchBuddy AI** is an enterprise-grade **Retrieval-Augmented Generation (RAG)** application designed to ingest, parse, chunk, index, and analyze dense academic research papers. It automatically extracts key claims, methodologies, contributions, limitations, datasets, and future work using an official Google Gemini LLM integration, while offering a grounded Question-Answering interface and a comparative analysis engine for multiple papers.
+**ResearchBuddy AI** is a scalable **Retrieval-Augmented Generation (RAG)** application designed to ingest, parse, chunk, index, and analyze dense academic research papers. It automatically extracts key claims, methodologies, contributions, limitations, datasets, and future work using an official Google Gemini LLM integration, while offering a grounded Question-Answering interface and a comparative analysis engine for multiple papers.
 
 ---
 
@@ -92,18 +92,18 @@ sequenceDiagram
 | Component | Technology | Rationale |
 | :--- | :--- | :--- |
 | **Frontend** | **React & Vite** | Lightweight, high-performance rendering, and rapid hot-module reloading (HMR) for interactive UI updates. |
-| **Backend** | **Spring Boot 3.3** | Enterprise-ready stability, strong type safety, and robust transaction management. Uses **Spring WebFlux WebClient** for non-blocking, asynchronous communication. |
+| **Backend** | **Spring Boot 3.3** | Stable, type-safe backend framework. Uses **Spring WebFlux WebClient** for non-blocking, asynchronous communication. |
 | **AI Service** | **FastAPI & Uvicorn** | Python-native speed, automatic OpenAPI documentation, and direct integration with machine learning libraries. |
 | **Vector DB** | **ChromaDB** | Vector database to store document embeddings and query nearest neighbors based on semantic cosine similarity. |
 | **Metadata DB**| **PostgreSQL 16** | ACID-compliant relational storage to manage paper records, metadata, and cached summaries. |
-| **Embeddings** | **Sentence Transformers** | Local execution of `all-MiniLM-L6-v2` (384-dimensional dense vectors) to guarantee fast and precise text representations. |
+| **Embeddings** | **Sentence Transformers** | Local execution of `all-MiniLM-L6-v2` (384-dimensional dense vectors) to keep data local and avoid external API dependency for vector search. |
 | **LLM** | **Google Gemini 2.5 Flash** | Cloud LLM integration via the official `google-genai` SDK for grounded generation (claims, summaries, comparisons, and QA). |
 
 ---
 
 ## 🚀 Fail-Fast Startup Verification
 
-To ensure reliability, the FastAPI server validates all major dependencies sequentially during startup. If any step fails, the server exits immediately with status `1`.
+To ensure reliability and prevent running in a degraded state, the FastAPI server validates all major dependencies sequentially during startup. If any dependency fails initialization, the AI service terminates immediately instead of silently switching to degraded behaviour.
 
 ```
 ===================================
@@ -132,30 +132,19 @@ AI Service Ready
 
 ---
 
-## 📊 RAG Performance & Parameter Analysis
+## 📊 RAG Retrieval Stage & Parameter Analysis
 
-To optimize the retrieval quality and generation accuracy, the RAG pipeline is calibrated using a **Sliding Window Chunking** strategy.
-
-### Chunk Size vs. Retrieval Accuracy
-The relationship between text chunk size, processing latency, and retrieval accuracy was analyzed to find the optimal configuration:
+To improve the retrieval quality and context preservation, the RAG pipeline is calibrated using a **Sliding Window Chunking** strategy. 
 
 ```
-Retrieval Accuracy (%)
-  100 |                                 * * * (Optimal: 900 words)
-   90 |                           * * 
-   80 |                       * 
-   70 |                 * 
-   60 |           * 
-   50 |     * 
-    0 +---------------------------------------------------------
-     100   300   500   700   900   1100   1300   1500  (Chunk Size in Words)
+SentenceTransformer ──> Embedding ──> ChromaDB Index ──> Top-k Similarity Search ──> Retrieved Chunks ──> Gemini
 ```
 
-### Parameter Performance Matrix
-* **Chunk Size**: `900 words` — Large enough to preserve complete paragraph context and mathematical proof steps, yet small enough to avoid dilute embeddings.
+### Parameter Setup
+* **Chunk Size**: `900 words` — Large enough to preserve paragraph context and mathematical proof steps, yet small enough to avoid dilute embeddings.
 * **Overlap**: `140 words` — Prevents loss of context at chunk boundaries.
 * **Embedding Dimension**: `384` — Balanced trade-off between semantic representation and local CPU search speed.
-* **No Mock Fallbacks**: The system relies strictly on SentenceTransformer (`all-MiniLM-L6-v2`) and ChromaDB (`researchbuddy_chunks`) for embeddings and retrieval, and Gemini for text generation.
+* **Selection Rationale**: These settings were chosen experimentally to balance retrieval quality and context preservation while keeping search execution fast on the local CPU. No mock or fallback embeddings are used.
 
 ---
 
@@ -165,7 +154,7 @@ Retrieval Accuracy (%)
 * **Node.js** (v20+)
 * **Java JDK 17**
 * **Apache Maven** (v3.9+)
-* **Python** (v3.11 or v3.12)
+* **Python** (v3.11 - v3.14)
 * **Docker Desktop**
 
 ---
